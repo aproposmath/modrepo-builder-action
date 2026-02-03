@@ -244,9 +244,9 @@ def main():
             if old_release is not None:
                 print(f"Using old release {tag}")
                 entries.append(old_release)
-            else:
-                print(f"Skipping old release file {tag}")
-            continue
+                continue
+            # else:
+            #     print(f"Skipping old release file {tag}")
         
         if not has_zip or not tag:
             print(f"Skipping release {tag} as it has no zip file")
