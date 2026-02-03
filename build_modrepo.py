@@ -231,13 +231,17 @@ def main():
     releases = get_release_data()
     
     print(f"Loaded {len(releases)} new releases")
+    
+    print(releases)
 
     entries: list[ModMetadata] = []
 
     for rel in releases:
         tag = rel.get("tag")
         assets = rel.get("assets") or []
+        print("assets", assets)
         has_zip = any(((a.get("name") or "").lower().endswith(".zip")) for a in assets)
+        print("has_zip", has_zip)
         
         if datetime.fromisoformat(rel["updated_at"].strip()) < last_build_time:
             old_release = old_releases_by_tag.get(tag)
