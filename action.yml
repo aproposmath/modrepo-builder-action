@@ -1,0 +1,59 @@
+name: Build modrepo.xml and push to modrepo branch
+description: Generates modrepo.xml in repo root and commits it to modrepo branch.
+
+inputs:
+  target-branch:
+    description: Branch to write modrepo.xml to
+    required: false
+    default: modrepo
+  commit-message:
+    required: false
+    default: "Update modrepo.xml"
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout caller repo
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Build modrepo.xml
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        python3 "${{ github.action_path }}/build_modrepo.py"
+
+    - name: Publish modrepo.xml to target branch
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        TARGET_BRANCH="${{ inputs.target-branch }}"
+
+        git config user.name  "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        # create/update local branch from remote if it exists
+        if git ls-remote --exit-code --heads origin "$TARGET_BRANCH" >/dev/null 2>&1; then
+          git fetch origin "$TARGET_BRANCH":"$TARGET_BRANCH"
+          git checkout "$TARGET_BRANCH"
+        else
+          git checkout --orphan "$TARGET_BRANCH"
+          git rm -rf . >/dev/null 2>&1 || true
+        fi
+
+        # ensure the generated file is in root
+        test -f modrepo.xml
+
+        git add modrepo.xml
+
+        # no-op if unchanged
+        if git diff --cached --quiet; then
+          echo "modrepo.xml unchanged; nothing to commit."
+          exit 0
+        fi
+
+        git commit -m "${{ inputs.commit-message }}"
+        git push origin "$TARGET_BRANCH"
