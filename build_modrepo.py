@@ -221,12 +221,16 @@ def main():
     # This runs during a GitHub Action workflow. Ensure GH CLI auth via:
     #   env: GH_TOKEN: ${{ github.token }}
 
+    print("ModRepo Builder")
     last_build_time, old_releases = read_existing_modrepo()
+    
+    print(f"Loaded {len(old_releases)} old releases")
     
     old_releases_by_tag = {mr.tag: mr for mr in old_releases if getattr(mr, "tag", None)}
 
     releases = get_release_data()
     
+    print(f"Loaded {len(releases)} new releases")
 
     entries: list[ModMetadata] = []
 
@@ -234,15 +238,20 @@ def main():
         tag = rel.get("tag")
         assets = rel.get("assets") or []
         has_zip = any(((a.get("name") or "").lower().endswith(".zip")) for a in assets)
-        if not has_zip or not tag:
-            continue
-            
+        
         if datetime.fromisoformat(rel["updated_at"]) < last_build_time:
             old_release = old_releases_by_tag.get(tag)
             if old_release is not None:
+                print(f"Using old release {tag}")
                 entries.append(old_release)
+            else:
+                print(f"Skipping old release file {tag}")
             continue
         
+        if not has_zip or not tag:
+            print(f"Skipping release {tag} as it has no zip file")
+            continue
+            
         print("checking new release:", tag)
 
         assets = rel.get("assets") or []

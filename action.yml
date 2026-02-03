@@ -50,4 +50,4 @@ runs:
         fi
 
         git commit -m "${{ inputs.commit-message }}"
-        git push origin "$TARGET_BRANCH"
+        git push origin modrepo
