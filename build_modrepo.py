@@ -195,7 +195,7 @@ def read_existing_modrepo():
             ["git", "log", "-1", "--format=%cI", "--", str(path)],
             stderr=subprocess.DEVNULL,
             text=True,
-        )
+        ).strip()
     )
 
     return modrepo_date, [
@@ -239,7 +239,7 @@ def main():
         assets = rel.get("assets") or []
         has_zip = any(((a.get("name") or "").lower().endswith(".zip")) for a in assets)
         
-        if datetime.fromisoformat(rel["updated_at"]) < last_build_time:
+        if datetime.fromisoformat(rel["updated_at"].strip()) < last_build_time:
             old_release = old_releases_by_tag.get(tag)
             if old_release is not None:
                 print(f"Using old release {tag}")
