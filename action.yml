@@ -2,10 +2,6 @@ name: Build modrepo.xml and push to modrepo branch
 description: Generates modrepo.xml in repo root and commits it to modrepo branch.
 
 inputs:
-  target-branch:
-    description: Branch to write modrepo.xml to
-    required: false
-    default: modrepo
   commit-message:
     required: false
     default: "Update modrepo.xml"
@@ -30,17 +26,15 @@ runs:
       run: |
         set -euo pipefail
 
-        TARGET_BRANCH="${{ inputs.target-branch }}"
-
         git config user.name  "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
 
         # create/update local branch from remote if it exists
-        if git ls-remote --exit-code --heads origin "$TARGET_BRANCH" >/dev/null 2>&1; then
-          git fetch origin "$TARGET_BRANCH":"$TARGET_BRANCH"
-          git checkout "$TARGET_BRANCH"
+        if git ls-remote --exit-code --heads origin modrepo >/dev/null 2>&1; then
+          git fetch origin modrepo:modrepo
+          git checkout modrepo
         else
-          git checkout --orphan "$TARGET_BRANCH"
+          git checkout --orphan modrepo
           git rm -rf . >/dev/null 2>&1 || true
         fi
 
