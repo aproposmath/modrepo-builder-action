@@ -237,22 +237,22 @@ def main():
     entries: list[ModMetadata] = []
 
     for rel in releases:
-        tag = rel.get("tag")
+        tag = rel.get("tag_name")
         assets = rel.get("assets") or []
         print("assets", assets)
         has_zip = any(((a.get("name") or "").lower().endswith(".zip")) for a in assets)
         print("has_zip", has_zip)
         
-        if datetime.fromisoformat(rel["updated_at"].strip()) < last_build_time:
-            old_release = old_releases_by_tag.get(tag)
-            if old_release is not None:
-                print(f"Using old release {tag}")
-                entries.append(old_release)
-                continue
-            # else:
-            #     print(f"Skipping old release file {tag}")
+        # if datetime.fromisoformat(rel["updated_at"].strip()) < last_build_time:
+        #     old_release = old_releases_by_tag.get(tag)
+        #     if old_release is not None:
+        #         print(f"Using old release {tag}")
+        #         entries.append(old_release)
+        #         continue
+        #     # else:
+        #     #     print(f"Skipping old release file {tag}")
         
-        if not has_zip or not tag:
+        if not has_zip:
             print(f"Skipping release {tag} as it has no zip file")
             continue
             
