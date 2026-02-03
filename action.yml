@@ -19,13 +19,7 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        python3 "${{ github.action_path }}/build_modrepo.py"
-
-    - name: Publish modrepo.xml to target branch
-      shell: bash
-      run: |
         set -euo pipefail
-
         git config user.name  "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
 
@@ -37,6 +31,13 @@ runs:
           git checkout --orphan modrepo
           git rm -rf . >/dev/null 2>&1 || true
         fi
+
+        python3 "${{ github.action_path }}/build_modrepo.py"
+
+    - name: Publish modrepo.xml to target branch
+      shell: bash
+      run: |
+        set -euo pipefail
 
         # ensure the generated file is in root
         test -f modrepo.xml
