@@ -156,38 +156,6 @@ def parse_version(s):
     return sections
 
 
-def read_existing_modrepo():
-    path = Path("modrepo.xml")
-
-    modrepo_date = datetime.fromisoformat("1970-01-01T00:00:00Z")
-
-    if not path.exists():
-        return modrepo_date, []
-
-    try:
-        root = ET.fromstring(path.read_text(encoding="utf-8"))
-    except Exception:
-        return modrepo_date, []
-
-    if root.tag != "ModRepo":
-        mr = root.find("ModRepo")
-        if mr is None:
-            return modrepo_date, []
-        root = mr
-
-    modrepo_date = datetime.fromisoformat(
-        subprocess.check_output(
-            ["git", "log", "-1", "--format=%cI", "--", str(path)],
-            stderr=subprocess.DEVNULL,
-            text=True,
-        ).strip()
-    )
-
-    return modrepo_date, [
-        ModMetadata.from_modrepo(mv) for mv in root.findall("ModVersion")
-    ]
-
-
 def get_release_data() -> list:
     owner, repo = os.environ["GITHUB_REPOSITORY"].strip().split("/", 1)
     return (
@@ -209,20 +177,9 @@ def main():
     cache_file = Path("modrepo_cache.json")
     cache = json.loads(cache_file.read_text()) if cache_file.exists() else {}
 
-    print("ModRepo Builder")
-    last_build_time, old_releases = read_existing_modrepo()
-
-    print(f"Loaded {len(old_releases)} old releases")
-
-    old_releases_by_tag = {
-        mr.tag: mr for mr in old_releases if getattr(mr, "tag", None)
-    }
-
     releases = get_release_data()
 
     print(f"Loaded {len(releases)} new releases")
-
-    print(releases)
 
     entries: list[ModMetadata] = []
 
