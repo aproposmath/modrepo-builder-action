@@ -177,6 +177,8 @@ def main():
     cache_file = Path("modrepo_cache.json")
     cache = json.loads(cache_file.read_text()) if cache_file.exists() else {}
 
+    print("Cache entries:", len(cache))
+
     releases = get_release_data()
 
     print(f"Loaded {len(releases)} new releases")
