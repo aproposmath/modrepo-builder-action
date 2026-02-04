@@ -1,17 +1,21 @@
 import hashlib
 import json
 import os
-import requests
 import re
 import subprocess
 import xml.etree.ElementTree as ET
 import zipfile
-from pathlib import Path
+from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
+import requests
+
+
+@dataclass
 class ModMetadata:
     id: str
-    _version: str
+    version: str
     name: str
     author: str
     url: str
@@ -22,7 +26,7 @@ class ModMetadata:
     depends_on: list[str]
 
     @staticmethod
-    def from_about_xml(elem: str | ET.Element | Path):
+    def from_about_xml(elem: str | ET.Element | Path, url: str, digest: str):
         """
         parse ModMetadata from xml string or Element
         """
@@ -32,58 +36,45 @@ class ModMetadata:
         if isinstance(elem, str):
             elem = ET.fromstring(elem)
 
-        mm = ModMetadata()
-
         def get_field(name) -> str:
             el = elem.findtext(name)
             if el is None:
                 raise ValueError(f"Missing  required <{name}> in About.xml")
             return el.strip()
 
-        mm.id = get_field("ModID")
-        mm.version = get_field("Version")
-        mm.name = get_field("Name")
-        mm.author = get_field("Author")
-
-        mm.read_data(elem)
-
-        return mm
-
-    @staticmethod
-    def from_modrepo(el: ET.Element):
-        mm = ModMetadata()
-
-        mm.id = el.attrib["ModID"]
-        mm.version = el.attrib["Version"]
-        mm.name = el.attrib["Name"]
-        mm.author = el.attrib["Author"]
-        mm.url = el.attrib["Url"]
-        mm.digest = el.attrib["Digest"]
-        mm.read_data(el)
-        return mm
+        data = ModMetadata.read_data(elem)
+        return ModMetadata(
+            id=get_field("ModID"),
+            version=get_field("Version"),
+            name=get_field("Name"),
+            author=get_field("Author"),
+            tag=data["tag"],
+            branch=data["branch"],
+            depends_on=data["depends_on"],
+            url=url,
+            digest=digest
+        )
 
     @property
-    def version(self):
-        return self._version
+    def version_parsed(self):
+        return parse_version(self.version)
 
-    @version.setter
-    def version(self, version: str):
-        self._version = version
-        self.version_parsed = parse_version(version)
-
-    def read_data(self, elem: ET.Element):
+    @staticmethod
+    def read_data(elem: ET.Element) -> dict:
         tags_el = elem.find("Tags")
-        self.tag = []
+        tag = []
         if tags_el:
             tags = [((t.text or "").strip()) for t in elem.findall("Tag")]
-            self.tag = [t for t in tags if t]
+            tag = [t for t in tags if t]
 
         depends = [
             ((d.attrib.get("ModID") or d.attrib.get("WorkshopHandle") or "").strip())
             for d in elem.findall("DependsOn")
         ]
-        self.depends_on = [d for d in depends if d]
-        self.branch = list(set([b.text or "" for b in elem.findall("Branch")]))
+        depends_on = [d for d in depends if d]
+        branch = list(set([b.text or "" for b in elem.findall("Branch")]))
+
+        return {"tag": tag, "depends_on": depends_on, "branch": branch}
 
     def to_xml(self):
         elem = ET.Element("ModMetadata")
@@ -116,12 +107,9 @@ def read_about_xml_from_zip(zip_path: Path) -> str | None:
     Returns the content of About/About.xml if present, otherwise None.
     """
     with zipfile.ZipFile(zip_path, "r") as zf:
-        # Normalize to forward slashes as zip uses them regardless of OS
-        candidates = [n for n in zf.namelist() if n.endswith("About/About.xml")]
-        if not candidates:
+        name = "About/About.xml"
+        if name not in zf.namelist():
             return None
-        # Prefer exact path if present
-        name = "About/About.xml" if "About/About.xml" in candidates else candidates[0]
         with zf.open(name, "r") as fp:
             return fp.read().decode("utf-8", errors="replace")
 
@@ -218,17 +206,22 @@ def main():
     # This runs during a GitHub Action workflow. Ensure GH CLI auth via:
     #   env: GH_TOKEN: ${{ github.token }}
 
+    cache_file = Path("modrepo_cache.json")
+    cache = json.loads(cache_file.read_text()) if cache_file.exists() else {}
+
     print("ModRepo Builder")
     last_build_time, old_releases = read_existing_modrepo()
-    
+
     print(f"Loaded {len(old_releases)} old releases")
-    
-    old_releases_by_tag = {mr.tag: mr for mr in old_releases if getattr(mr, "tag", None)}
+
+    old_releases_by_tag = {
+        mr.tag: mr for mr in old_releases if getattr(mr, "tag", None)
+    }
 
     releases = get_release_data()
-    
+
     print(f"Loaded {len(releases)} new releases")
-    
+
     print(releases)
 
     entries: list[ModMetadata] = []
@@ -236,24 +229,13 @@ def main():
     for rel in releases:
         tag = rel.get("tag_name")
         assets = rel.get("assets") or []
-        print("assets", assets)
         has_zip = any(((a.get("name") or "").lower().endswith(".zip")) for a in assets)
-        print("has_zip", has_zip)
-        
-        # if datetime.fromisoformat(rel["updated_at"].strip()) < last_build_time:
-        #     old_release = old_releases_by_tag.get(tag)
-        #     if old_release is not None:
-        #         print(f"Using old release {tag}")
-        #         entries.append(old_release)
-        #         continue
-        #     # else:
-        #     #     print(f"Skipping old release file {tag}")
-        
+
         if not has_zip:
             print(f"Skipping release {tag} as it has no zip file")
             continue
-            
-        print("checking new release:", tag)
+
+        print("handling release:", tag)
 
         assets = rel.get("assets") or []
         tmp = Path("_downloads")
@@ -264,8 +246,20 @@ def main():
                 continue
             if not url:
                 continue
-                
+
             print("\tchecking asset", name)
+            digest = asset.get("digest")
+            if digest in cache:
+                metadata = cache[digest]
+                if not metadata:
+                    continue
+
+                mm = ModMetadata(**metadata)
+                print(
+                    f"\tfound mod in cache: id={mm.id}, name={mm.name}, version={mm.version}, branch={mm.branch}"
+                )
+                entries.append(mm)
+                continue
 
             # Download asset to temp dir using requests
             outdir = tmp / f"asset_{i}"
@@ -278,15 +272,19 @@ def main():
                     for chunk in r.iter_content(chunk_size=1024 * 1024):
                         if chunk:
                             f.write(chunk)
-                            
+
             about_xml = read_about_xml_from_zip(zip_path)
             if not about_xml:
+                cache[digest] = False
                 continue
 
-            mm = ModMetadata.from_about_xml(about_xml)
+            mm = ModMetadata.from_about_xml(about_xml, url, digest)
             mm.digest = sha256(zip_path)
             mm.url = url
-            print(f"\tfound mod id={mm.id}, name={mm.name}, version={mm.version}, branch={mm.branch}")
+            print(
+                f"\tfound mod id={mm.id}, name={mm.name}, version={mm.version}, branch={mm.branch}"
+            )
+            cache[digest] = dict(mm.__dict__)
             entries.append(mm)
 
     # write modrepo.xml
@@ -303,8 +301,9 @@ def main():
         mv.set("Url", mm.url)
         mv.set("Digest", mm.digest)
 
-        b = ET.SubElement(mv, "Branch")
-        b.set("Value", mm.branch or "")
+        for branch in mm.branch:
+            b = ET.SubElement(mv, "Branch")
+            b.set("Value", branch)
 
     ET.indent(modrepo, space="  ", level=0)
     xml_str = ET.tostring(modrepo, encoding="unicode")
@@ -312,6 +311,7 @@ def main():
     # Add XML header for readability/compatibility if consumers expect it
     xml_out = '<?xml version="1.0" encoding="utf-8"?>\n' + xml_str + "\n"
     Path("modrepo.xml").write_text(xml_out, encoding="utf-8")
+    cache_file.write_text(json.dumps(cache, indent=4, sort_keys=True), encoding="utf-8")
 
 
 if __name__ == "__main__":

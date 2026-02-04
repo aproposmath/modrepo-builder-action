@@ -39,10 +39,7 @@ runs:
       run: |
         set -euo pipefail
 
-        # ensure the generated file is in root
-        test -f modrepo.xml
-
-        git add modrepo.xml
+        git add modrepo.xml modrepo_cache.json
 
         # no-op if unchanged
         if git diff --cached --quiet; then
