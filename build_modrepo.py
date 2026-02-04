@@ -185,6 +185,8 @@ def main():
 
     entries: list[ModMetadata] = []
 
+    all_zip_digests = set()
+
     for rel in releases:
         tag = rel.get("tag_name")
         assets = rel.get("assets") or []
@@ -208,6 +210,7 @@ def main():
 
             print("\tchecking asset", name)
             digest = asset.get("digest")
+            all_zip_digests.add(digest)
             if digest in cache:
                 metadata = cache[digest]
                 if not metadata:
@@ -270,6 +273,11 @@ def main():
     # Add XML header for readability/compatibility if consumers expect it
     xml_out = '<?xml version="1.0" encoding="utf-8"?>\n' + xml_str + "\n"
     Path("modrepo.xml").write_text(xml_out, encoding="utf-8")
+
+    # remove cache entries for zip files no longer present
+    removed_digests = set(cache.keys()) - all_zip_digests
+    for digest in removed_digests:
+        del cache[digest]
     cache_file.write_text(json.dumps(cache, indent=4, sort_keys=True), encoding="utf-8")
 
 
