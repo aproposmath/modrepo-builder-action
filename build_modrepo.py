@@ -108,7 +108,7 @@ def sha256(path: Path) -> str:
     with path.open("rb") as f:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
-    return h.hexdigest()
+    return "sha256:" + h.hexdigest()
 
 
 def read_about_xml_from_zip(zip_path: Path) -> str | None:
