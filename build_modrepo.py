@@ -63,8 +63,8 @@ class ModMetadata:
     def read_data(elem: ET.Element) -> dict:
         tags_el = elem.find("Tags")
         tag = []
-        if tags_el:
-            tags = [((t.text or "").strip()) for t in elem.findall("Tag")]
+        if tags_el is not None:
+            tags = [((t.text or "").strip()) for t in tags_el.findall("Tag")]
             tag = [t for t in tags if t]
 
         depends = [
