@@ -17,7 +17,7 @@ class ModMetadata:
     url: str
     digest: str
 
-    branch: str
+    branch: list[str]
     tag: list[str]
     depends_on: list[str]
 
@@ -83,17 +83,14 @@ class ModMetadata:
             for d in elem.findall("DependsOn")
         ]
         self.depends_on = [d for d in depends if d]
-
-        # If multiple <Branch> entries exist, prefer the last one; default to empty string
-        branches = [b.text or "" for b in elem.findall("Branch")]
-        branch = branches[-1] if branches else ""
-        self.branch = branch.strip()
+        self.branch = list(set([b.text or "" for b in elem.findall("Branch")]))
 
     def to_xml(self):
         elem = ET.Element("ModMetadata")
         ET.SubElement(elem, "ModID").text = self.id
         ET.SubElement(elem, "Version").text = self.version
-        ET.SubElement(elem, "Branch").text = self.branch or ""
+        for branch in self.branch:
+            ET.SubElement(elem, "Branch").text = branch
         return ET.tostring(elem, encoding="unicode")
 
 
