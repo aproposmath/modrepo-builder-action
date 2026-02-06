@@ -14,6 +14,12 @@ runs:
       with:
         fetch-depth: 0
 
+    - name: Ensure xmllint is available
+      run: |
+        if ! command -v xmllint >/dev/null 2>&1; then
+          sudo apt-get update
+          sudo apt-get install -y libxml2-utils
+        fi
     - name: Build modrepo.xml
       shell: bash
       env:
@@ -33,6 +39,8 @@ runs:
         fi
 
         python3 "${{ github.action_path }}/build_modrepo.py"
+        xmllint --noout modrepo.xml
+        xmllint --pretty 2 modrepo.xml > modrepo.xml.tmp && mv modrepo.xml.tmp modrepo.xml
 
     - name: Publish modrepo.xml to target branch
       shell: bash
