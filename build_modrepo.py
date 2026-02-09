@@ -222,6 +222,7 @@ def handle_asset(asset: dict, cache: dict, all_zip_digests: set) -> ModMetadata 
         f"\tfound mod id={mm.id}, name={mm.name}, version={mm.version}, branch={mm.branch}"
     )
     cache[digest] = dict(mm.__dict__)
+    return mm
 
 
 def main():
