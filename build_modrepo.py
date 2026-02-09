@@ -6,7 +6,6 @@ import subprocess
 import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -39,7 +38,7 @@ class ModMetadata:
         def get_field(name) -> str:
             el = elem.findtext(name)
             if el is None:
-                raise ValueError(f"Missing  required <{name}> in About.xml")
+                raise ValueError(f"Missing required <{name}> in About.xml")
             return el.strip()
 
         data = ModMetadata.read_data(elem)
@@ -52,7 +51,7 @@ class ModMetadata:
             branch=data["branch"],
             depends_on=data["depends_on"],
             url=url,
-            digest=digest
+            digest=digest,
         )
 
     @property
@@ -170,6 +169,58 @@ def get_release_data() -> list:
     )
 
 
+def handle_asset(asset: dict, cache: dict, all_zip_digests: set) -> ModMetadata | None:
+    name = asset.get("name", "")
+    url = asset.get("browser_download_url", "")
+    if not name.lower().endswith(".zip"):
+        return
+    if not url:
+        return
+
+    print("\tchecking asset", name)
+    digest = asset.get("digest")
+
+    if not digest:
+        return
+
+    all_zip_digests.add(digest)
+    if digest in cache:
+        metadata = cache[digest]
+        if not metadata:
+            return
+
+        mm = ModMetadata(**metadata)
+        print(
+            f"\tfound mod in cache: id={mm.id}, name={mm.name}, version={mm.version}, branch={mm.branch}"
+        )
+        return mm
+
+    # Download asset to temp dir using requests
+    outdir = Path("_downloads") / f"asset_{digest.replace(":", "_")}"
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    zip_path = outdir / name
+    with requests.get(url, stream=True, timeout=10) as r:
+        r.raise_for_status()
+        with zip_path.open("wb") as f:
+            for chunk in r.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+
+    about_xml = read_about_xml_from_zip(zip_path)
+    if not about_xml:
+        cache[digest] = False
+        return
+
+    mm = ModMetadata.from_about_xml(about_xml, url, digest)
+    mm.digest = sha256(zip_path)
+    mm.url = url
+    print(
+        f"\tfound mod id={mm.id}, name={mm.name}, version={mm.version}, branch={mm.branch}"
+    )
+    cache[digest] = dict(mm.__dict__)
+
+
 def main():
     # This runs during a GitHub Action workflow. Ensure GH CLI auth via:
     #   env: GH_TOKEN: ${{ github.token }}
@@ -199,55 +250,13 @@ def main():
         print("handling release:", tag)
 
         assets = rel.get("assets") or []
-        tmp = Path("_downloads")
-        for i, asset in enumerate(assets):
-            name = asset.get("name", "")
-            url = asset.get("browser_download_url", "")
-            if not name.lower().endswith(".zip"):
-                continue
-            if not url:
-                continue
-
-            print("\tchecking asset", name)
-            digest = asset.get("digest")
-            all_zip_digests.add(digest)
-            if digest in cache:
-                metadata = cache[digest]
-                if not metadata:
-                    continue
-
-                mm = ModMetadata(**metadata)
-                print(
-                    f"\tfound mod in cache: id={mm.id}, name={mm.name}, version={mm.version}, branch={mm.branch}"
-                )
-                entries.append(mm)
-                continue
-
-            # Download asset to temp dir using requests
-            outdir = tmp / f"asset_{i}"
-            outdir.mkdir(parents=True, exist_ok=True)
-
-            zip_path = outdir / name
-            with requests.get(url, stream=True, timeout=10) as r:
-                r.raise_for_status()
-                with zip_path.open("wb") as f:
-                    for chunk in r.iter_content(chunk_size=1024 * 1024):
-                        if chunk:
-                            f.write(chunk)
-
-            about_xml = read_about_xml_from_zip(zip_path)
-            if not about_xml:
-                cache[digest] = False
-                continue
-
-            mm = ModMetadata.from_about_xml(about_xml, url, digest)
-            mm.digest = sha256(zip_path)
-            mm.url = url
-            print(
-                f"\tfound mod id={mm.id}, name={mm.name}, version={mm.version}, branch={mm.branch}"
-            )
-            cache[digest] = dict(mm.__dict__)
-            entries.append(mm)
+        for asset in assets:
+            try:
+                mm = handle_asset(asset, cache, all_zip_digests)
+                if mm:
+                    entries.append(mm)
+            except Exception as e:
+                print(f"Error handling asset {asset.get('name')} in release {tag}: {e}")
 
     # write modrepo.xml
     modrepo = ET.Element("ModRepo")
