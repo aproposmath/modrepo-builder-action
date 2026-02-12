@@ -31,13 +31,8 @@ runs:
         git config user.email "github-actions[bot]@users.noreply.github.com"
 
         # create/update local branch from remote if it exists
-        if git ls-remote --exit-code --heads origin modrepo >/dev/null 2>&1; then
-          git fetch origin modrepo:modrepo
-          git checkout modrepo
-        else
-          git checkout --orphan modrepo
-          git rm -rf . >/dev/null 2>&1 || true
-        fi
+        git remote update
+        git checkout -B modrepo origin/modrepo || git checkout -b modrepo
 
         python3 "${{ github.action_path }}/build_modrepo.py"
         xmllint --noout modrepo.xml
@@ -57,4 +52,4 @@ runs:
         fi
 
         git commit -m "${{ inputs.commit-message }}"
-        git push origin modrepo
+        git push origin -f modrepo
