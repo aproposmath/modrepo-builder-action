@@ -32,7 +32,7 @@ runs:
 
         # create/update local branch from remote if it exists
         git remote update
-        git checkout -B modrepo origin/modrepo || git checkout -b modrepo
+        git checkout -B modrepo origin/modrepo || { git checkout --orphan -b modrepo && git rm -rf .; }
 
         python3 "${{ github.action_path }}/build_modrepo.py"
         xmllint --noout modrepo.xml
